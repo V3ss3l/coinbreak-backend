@@ -1,22 +1,18 @@
 package com.example.coinbreakbackend.controller;
 
-import ch.qos.logback.core.util.ContentTypeUtil;
-import com.example.coinbreakbackend.model.Currency;
-import com.example.coinbreakbackend.model.WalletDto;
+import com.example.coinbreakbackend.model.ResponseInfo;
 import com.example.coinbreakbackend.service.WalletService;
-import com.example.coinbreakbackend.service.impl.WalletServiceImpl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jdk.jfr.ContentType;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Objects;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/wallet")
+@CrossOrigin(origins = "http://localhost:4200")
 public class WalletController {
     private final WalletService walletService;
     private ObjectMapper objectMapper;
@@ -26,43 +22,118 @@ public class WalletController {
         this.objectMapper = new ObjectMapper();
     }
 
-    @GetMapping(path = "/balance/currency/{currency}")
-    public ResponseEntity<String> getBalanceByCurrency(@PathVariable String currency) throws JsonProcessingException {
+    @GetMapping(path = "/balance/currency/{currency}", produces = "application/json")
+    public ResponseEntity<ResponseInfo> getBalanceByCurrency(@PathVariable String currency) throws JsonProcessingException {
         var result = walletService.balance(currency);
-        if (result == null)
-            return new ResponseEntity<>("ERROR", HttpStatusCode.valueOf(500));
-        var string = objectMapper.writeValueAsString(result);
-        return new ResponseEntity<>(string, HttpStatusCode.valueOf(200));
+        var response = ResponseInfo.builder()
+                .data(result)
+                .build();
+        if(((Map<?, ?>) result).containsKey("stackTrace")){
+            response.setHttpCode(HttpStatusCode.valueOf(500).toString());
+            response.setStackTrace((String) ((Map<?, ?>) result).get("stackTrace"));
+            response.setInfo("При получении баланса возникла ошибка");
+        }
+        else {
+            response.setHttpCode(HttpStatusCode.valueOf(200).toString());
+            response.setInfo(String.format("Баланс кошелька по валюте %s отправлен", currency));
+        }
+        return ResponseEntity.ok(response);
     }
 
-    @PostMapping(path = "/deposit")
-    public ResponseEntity<Long> depositToWallet(){
-        return new ResponseEntity<>(1L, HttpStatusCode.valueOf(200));
+    @PostMapping(path = "/deposit", produces = "application/json")
+    public ResponseEntity<ResponseInfo> depositToWallet(@RequestParam Map<String, Object> params){
+        Long amount = Long.valueOf((String) params.get("amount"));
+        String currency = (String) params.get("currency");
+        var result = walletService.deposit(amount, currency);
+        var response = ResponseInfo.builder()
+                .data(result)
+                .build();
+        if(((Map<?, ?>) result).containsKey("stackTrace")){
+            response.setHttpCode(HttpStatusCode.valueOf(500).toString());
+            response.setStackTrace((String) ((Map<?, ?>) result).get("stackTrace"));
+            response.setInfo("При пополнении кошелька возникла ошибка");
+        }
+        else {
+            response.setHttpCode(HttpStatusCode.valueOf(200).toString());
+            response.setInfo("Кошелек был успешно пополнен");
+        }
+        return ResponseEntity.ok(response);
     }
 
-    @PostMapping(path = "/withdraw")
-    public ResponseEntity<Long> withdrawToWallet(@PathVariable String adressantKey){
-        return new ResponseEntity<>(1L, HttpStatusCode.valueOf(200));
+    @PostMapping(path = "/withdraw", produces = "application/json")
+    public ResponseEntity<ResponseInfo> withdrawToWallet(@RequestParam Map<String, Object> params){
+        Long amount = Long.valueOf((String) params.get("amount"));
+        String currency = (String) params.get("currency");
+        String to = (String) params.get("addressTo");
+        var result = walletService.withdraw(amount, currency, to);
+        var response = ResponseInfo.builder()
+                .data(result)
+                .build();
+        if(((Map<?, ?>) result).containsKey("stackTrace")){
+            response.setHttpCode(HttpStatusCode.valueOf(500).toString());
+            response.setStackTrace((String) ((Map<?, ?>) result).get("stackTrace"));
+            response.setInfo("При переводе возникла ошибка");
+        }
+        else {
+            response.setHttpCode(HttpStatusCode.valueOf(200).toString());
+            response.setInfo("Перевод был успешно завершен");
+        }
+        return ResponseEntity.ok(response);
     }
 
-    @GetMapping(path = "/create")
-    public ResponseEntity<String> createWallet(@RequestParam String password){
-        WalletDto dto = walletService.generate(password);
-        if (Objects.nonNull(dto)) return ResponseEntity.ok().body(WalletDto.toString(dto));
-        else ResponseEntity.internalServerError();
-        return null;
+    @PostMapping(path = "/create", produces = "application/json")
+    public ResponseEntity<ResponseInfo> createWallet(@RequestParam String password){
+        Object result = walletService.generate(password);
+        var response = ResponseInfo.builder()
+                .data(result)
+                .build();
+        if(((Map<?, ?>) result).containsKey("stackTrace")){
+            response.setHttpCode(HttpStatusCode.valueOf(500).toString());
+            response.setStackTrace((String) ((Map<?, ?>) result).get("stackTrace"));
+            response.setInfo("При создании кошелка возникла ошибка");
+        }
+        else {
+            response.setHttpCode(HttpStatusCode.valueOf(200).toString());
+            response.setInfo("Кошелек был создан");
+        }
+        return ResponseEntity.ok(response);
     }
 
-    @GetMapping(path="/restore")
-    public ResponseEntity<?> restoreWallet(@RequestParam String password){
-        var credentials = walletService.restore(password);
-        return ResponseEntity.ok(credentials.getAddress());
+    @GetMapping(path="/restore", produces = "application/json")
+    public ResponseEntity<ResponseInfo> restoreWallet(@RequestParam String password){
+        var result = walletService.restore(password);
+        ResponseInfo response = ResponseInfo.builder()
+                .data(result)
+                .build();
+        if(((Map<?, ?>) result).containsKey("stackTrace")){
+            response.setInfo("Произошла ошибка при восстановлении кошелька");
+            response.setHttpCode(HttpStatusCode.valueOf(500).toString());
+            response.setStackTrace((String) ((Map<?, ?>) result).get("stackTrace"));
+        } else {
+            response.setHttpCode(HttpStatusCode.valueOf(200).toString());
+            response.setInfo("Восстановлен доступ к кошельку");
+        }
+        return ResponseEntity.ok(response);
     }
 
-    @GetMapping(path="/generate/seed")
-    public ResponseEntity<String> generateSeed(@RequestParam Integer sizeOfSeed, @RequestParam String language){
-        var seed = walletService.generateSeed(sizeOfSeed, language);
-        return ResponseEntity.ok(seed);
+    @PostMapping(path="/generate/seed", produces = "application/json")
+    @ResponseBody
+    public ResponseEntity<ResponseInfo> generateSeed(@RequestParam Map<String, Object> params){
+        var sizeOfSeed = Integer.valueOf((String) params.get("size"));
+        var language = (String) params.get("language");
+        Object result = walletService.generateSeed(sizeOfSeed, language);
+        ResponseInfo response = ResponseInfo.builder()
+                .data(result)
+                .build();
+        if(((Map<?, ?>) result).containsKey("stackTrace")){
+            response.setInfo("Произошла ошибка при генерации сид фразы");
+            response.setHttpCode(HttpStatusCode.valueOf(500).toString());
+            response.setStackTrace((String) ((Map<?, ?>) result).get("stackTrace"));
+        } else {
+            response.setHttpCode(HttpStatusCode.valueOf(200).toString());
+            response.setInfo("Генерация сид фразы прошла успешно");
+        }
+        return ResponseEntity.ok(response);
     }
 
 }

@@ -11,10 +11,10 @@ import java.util.Map;
 @EqualsAndHashCode
 @NoArgsConstructor
 @AllArgsConstructor
-public class WalletDto{
+public class WalletDto implements Serializable{
     private Long id;
     private String publicKey;
-    private Map<Currency, BigDecimal> balance;
+    private String seed;
 
     public static String toString(WalletDto dto){
         StringBuilder string = new StringBuilder();

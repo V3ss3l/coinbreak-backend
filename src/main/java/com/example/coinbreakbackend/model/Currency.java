@@ -21,5 +21,4 @@ public class Currency implements Serializable {
     private Long id;
     private String name;
     private String symbol;
-    private String contract;
 }

@@ -7,10 +7,10 @@ import org.web3j.crypto.Credentials;
 import java.util.Map;
 
 public interface WalletService {
-    WalletDto generate(String password);
-    void deposit(Long amount, String currency);
-    void withdraw(Long amount, String currency, String toAddress);
-    Long balance(String currency);
-    Credentials restore(String password);
-    String generateSeed(Integer size, String language);
+    Object generate(String password);
+    Object deposit(Long amount, String currency);
+    Object withdraw(Long amount, String currency, String toAddress);
+    Object balance(String currency);
+    Object restore(String password);
+    Object generateSeed(Integer size, String language);
 }
