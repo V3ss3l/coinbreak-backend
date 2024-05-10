@@ -7,21 +7,21 @@ import com.example.coinbreakbackend.repository.WalletRepository;
 import com.example.coinbreakbackend.service.WalletService;
 import com.example.coinbreakbackend.util.CoinWalletUtils;
 import com.example.coinbreakbackend.util.HumanStandardToken;
-import com.fasterxml.jackson.databind.util.ExceptionUtil;
-import io.reactivex.exceptions.Exceptions;
-import org.apache.el.util.ExceptionUtils;
+import org.apache.logging.log4j.util.Strings;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.web3j.crypto.*;
 import org.web3j.protocol.Web3j;
 import org.web3j.protocol.core.DefaultBlockParameter;
 import org.web3j.protocol.core.DefaultBlockParameterName;
 import org.web3j.protocol.core.methods.response.*;
-import org.web3j.tx.Transfer;
 import org.web3j.tx.gas.ContractGasProvider;
 import org.web3j.utils.Convert;
 import org.web3j.utils.Numeric;
 
 import javax.crypto.Cipher;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
 import java.io.*;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
@@ -40,6 +40,9 @@ public class WalletServiceImpl implements WalletService {
 
     private Credentials credentials;
     private HumanStandardToken token;
+
+    @Value("${cipher.password:#{''}}")
+    private String cipherPassword;
 
     public WalletServiceImpl(WalletRepository walletRepository,
                              CurrencyRepository currencyRepository,
@@ -74,7 +77,7 @@ public class WalletServiceImpl implements WalletService {
                     .seed(seed)
                     .build();
             byte[] serialized = CoinWalletUtils.serialize(dto);
-            CoinWalletUtils.initToEncryptModeCipher(cipher, decodedPassword);
+            //CoinWalletUtils.initToEncryptModeCipher(cipher, cipherPassword);
             var encrypted = cipher.doFinal(serialized);
             return Collections.singletonMap("value", encrypted);
         } catch (Exception e) {
@@ -117,15 +120,19 @@ public class WalletServiceImpl implements WalletService {
     public Object withdraw(Long amount, String currency, String toAddress) {
         try {
             if(Objects.isNull(credentials)) return null;
+
             BigInteger value = Convert.toWei(amount.toString(), Convert.Unit.ETHER).toBigInteger();
+
             EthGetTransactionCount ethGetTransactionCount = web3j.ethGetTransactionCount(
                     credentials.getAddress(), DefaultBlockParameterName.LATEST).sendAsync().get();
             BigInteger nonce = ethGetTransactionCount.getTransactionCount();
+
             RawTransaction rawTransaction = RawTransaction.createEtherTransaction(nonce, gasProvider.getGasPrice(), gasProvider.getGasLimit(),
                     toAddress, value);
             byte[] signedMessage = TransactionEncoder.signMessage(rawTransaction, credentials);
             String hexValue = Numeric.toHexString(signedMessage);
             EthSendTransaction ethSendTransaction = web3j.ethSendRawTransaction(hexValue).send();
+
             return ethSendTransaction.getTransactionHash();
         } catch (Exception e) {
             e.printStackTrace();
@@ -182,9 +189,10 @@ public class WalletServiceImpl implements WalletService {
     public Object generateSeed(Integer size, String language){
         try {
             String seed = CoinWalletUtils.generateSeed(size, language);
-            byte[] seedBytes = seed.getBytes(StandardCharsets.UTF_8);
-            CoinWalletUtils.initToEncryptModeCipher(cipher, "password");
-            return Collections.singletonMap("seed", cipher.doFinal(seedBytes));
+            byte[] salt = CoinWalletUtils.generateSalt();
+            CoinWalletUtils.initToEncryptModeCipher(cipher, cipherPassword, salt);
+            String result = CoinWalletUtils.encrypt(seed, cipher, salt);
+            return Collections.singletonMap("seed", result);
         } catch (Exception e){
             e.printStackTrace();
             var stackTrace = CoinWalletUtils.getStackTrace(e);
@@ -192,5 +200,18 @@ public class WalletServiceImpl implements WalletService {
         }
     }
 
+    @Override
+    public Object test(String password){
+        try{
+            byte[] salt = CoinWalletUtils.generateSalt();
+            CoinWalletUtils.initToEncryptModeCipher(cipher, cipherPassword, salt);
+            var result = CoinWalletUtils.encrypt("password", cipher, salt);
+            return Map.of("result", result);
+        }catch (Exception e){
+            e.printStackTrace();
+            var stackTrace = CoinWalletUtils.getStackTrace(e);
+            return Map.of("value", null, "stackTrace", stackTrace);
+        }
+    }
 
 }

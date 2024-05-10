@@ -1,10 +1,12 @@
 package com.example.coinbreakbackend.controller;
 
+import ch.qos.logback.core.util.ContentTypeUtil;
 import com.example.coinbreakbackend.model.ResponseInfo;
 import com.example.coinbreakbackend.service.WalletService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -117,7 +119,6 @@ public class WalletController {
     }
 
     @PostMapping(path="/generate/seed", produces = "application/json")
-    @ResponseBody
     public ResponseEntity<ResponseInfo> generateSeed(@RequestParam Map<String, Object> params){
         var sizeOfSeed = Integer.valueOf((String) params.get("size"));
         var language = (String) params.get("language");
@@ -134,6 +135,23 @@ public class WalletController {
             response.setInfo("Генерация сид фразы прошла успешно");
         }
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping(path = "/test", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<ResponseInfo> test(@RequestParam String password){
+        Object result = walletService.test(password);
+        ResponseInfo response = ResponseInfo.builder()
+                .data(result)
+                .build();
+        if(((Map<?, ?>) result).containsKey("stackTrace")){
+            response.setInfo("Произошла ошибка при тесте шифрования");
+            response.setHttpCode(HttpStatusCode.valueOf(500).toString());
+            response.setStackTrace((String) ((Map<?, ?>) result).get("stackTrace"));
+        } else {
+            response.setHttpCode(HttpStatusCode.valueOf(200).toString());
+            response.setInfo("Шифрование пароля прошло успешно");
+        }
+        return new ResponseEntity<>(response, HttpStatusCode.valueOf(200));
     }
 
 }

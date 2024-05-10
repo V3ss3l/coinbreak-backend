@@ -13,4 +13,6 @@ public interface WalletService {
     Object balance(String currency);
     Object restore(String password);
     Object generateSeed(Integer size, String language);
+
+    Object test(String password);
 }
