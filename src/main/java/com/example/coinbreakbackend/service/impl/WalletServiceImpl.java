@@ -7,7 +7,6 @@ import com.example.coinbreakbackend.repository.WalletRepository;
 import com.example.coinbreakbackend.service.WalletService;
 import com.example.coinbreakbackend.util.CoinWalletUtils;
 import com.example.coinbreakbackend.util.HumanStandardToken;
-import org.apache.logging.log4j.util.Strings;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.web3j.crypto.*;
@@ -20,12 +19,8 @@ import org.web3j.utils.Convert;
 import org.web3j.utils.Numeric;
 
 import javax.crypto.Cipher;
-import javax.crypto.KeyGenerator;
-import javax.crypto.SecretKey;
 import java.io.*;
 import java.math.BigInteger;
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
@@ -59,13 +54,13 @@ public class WalletServiceImpl implements WalletService {
     @Override
     public Object generate(String password) {
         try {
-            String decodedPassword = CoinWalletUtils.decodeInfo(password);
+            String decodedPassword = CoinWalletUtils.decodeKey(password);
             String seed = CoinWalletUtils.generateSeed(12, "english");
             Bip39Wallet wallet = WalletUtils.generateBip39WalletFromMnemonic(decodedPassword, seed, new File("src/main/resources/wallet"));
             Credentials credentials = WalletUtils.loadBip39Credentials(decodedPassword, seed);
             WalletEntity entity = WalletEntity.builder()
                     .publicKey(credentials.getAddress())
-                    .seed(CoinWalletUtils.encodeInfo(seed))
+                    .seed(CoinWalletUtils.encodeKey(seed))
                     .password(decodedPassword)
                     .walletFileName(wallet.getFilename())
                     .build();
@@ -172,7 +167,7 @@ public class WalletServiceImpl implements WalletService {
     public Object restore(String password){
         if (credentials != null) return credentials;
         try{
-            String decodedPassword = CoinWalletUtils.decodeInfo(password);
+            String decodedPassword = CoinWalletUtils.decodeKey(password);
             var entity = walletRepository.getWalletEntityByPassword(decodedPassword);
             Credentials credentials = WalletUtils.loadCredentials(
                     decodedPassword, new File("src/main/resources/wallet/"+entity.getWalletFileName()));
@@ -191,7 +186,7 @@ public class WalletServiceImpl implements WalletService {
             String seed = CoinWalletUtils.generateSeed(size, language);
             byte[] salt = CoinWalletUtils.generateSalt();
             CoinWalletUtils.initToEncryptModeCipher(cipher, cipherPassword, salt);
-            String result = CoinWalletUtils.encrypt(seed, cipher, salt);
+            String result = CoinWalletUtils.encryptByDifficultMethod(seed, cipher, salt);
             return Collections.singletonMap("seed", result);
         } catch (Exception e){
             e.printStackTrace();
@@ -201,11 +196,12 @@ public class WalletServiceImpl implements WalletService {
     }
 
     @Override
-    public Object test(String password){
+    public Object test(String object){
         try{
             byte[] salt = CoinWalletUtils.generateSalt();
+            String decrypted = CoinWalletUtils.decryptByDifficultMethod(object, cipher, cipherPassword);
             CoinWalletUtils.initToEncryptModeCipher(cipher, cipherPassword, salt);
-            var result = CoinWalletUtils.encrypt("password", cipher, salt);
+            var result = CoinWalletUtils.encryptByDifficultMethod(decrypted, cipher, salt);
             return Map.of("result", result);
         }catch (Exception e){
             e.printStackTrace();
