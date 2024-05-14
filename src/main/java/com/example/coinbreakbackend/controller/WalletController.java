@@ -1,15 +1,15 @@
 package com.example.coinbreakbackend.controller;
 
-import ch.qos.logback.core.util.ContentTypeUtil;
 import com.example.coinbreakbackend.model.ResponseInfo;
 import com.example.coinbreakbackend.service.WalletService;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -17,11 +17,9 @@ import java.util.Map;
 @CrossOrigin(origins = "http://localhost:4200")
 public class WalletController {
     private final WalletService walletService;
-    private ObjectMapper objectMapper;
 
     public WalletController(WalletService walletService) {
         this.walletService = walletService;
-        this.objectMapper = new ObjectMapper();
     }
 
     @GetMapping(path = "/balance/currency/{currency}", produces = "application/json")
@@ -38,6 +36,31 @@ public class WalletController {
         else {
             response.setHttpCode(HttpStatusCode.valueOf(200).toString());
             response.setInfo(String.format("Баланс кошелька по валюте %s отправлен", currency));
+        }
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping(path = "/balance/currency/all", produces = "application/json")
+    public ResponseEntity<ResponseInfo> getBalanceByAllCurrencies(@RequestParam Map<String, Object> params) throws JsonProcessingException {
+        List<Map<String, Object>> result = new ArrayList<>();
+        params.entrySet().forEach(stringObjectEntry -> {
+            result.add((Map<String, Object>) walletService.balanceAll((String) stringObjectEntry.getValue()));
+        });
+        var response = ResponseInfo.builder()
+                .data(result)
+                .build();
+
+        if(result.stream().anyMatch(pr -> pr.containsKey("stackTrace"))){
+            response.setHttpCode(HttpStatusCode.valueOf(500).toString());
+            response.setStackTrace((String) result.stream()
+                    .filter(pr -> pr.containsKey("stackTrace"))
+                    .findFirst().get()
+                    .get("stackTrace"));
+            response.setInfo("При получении баланса возникла ошибка");
+        }
+        else {
+            response.setHttpCode(HttpStatusCode.valueOf(200).toString());
+            response.setInfo("Баланс кошелька отправлен");
         }
         return ResponseEntity.ok(response);
     }
@@ -84,15 +107,17 @@ public class WalletController {
     }
 
     @PostMapping(path = "/create", produces = "application/json")
-    public ResponseEntity<ResponseInfo> createWallet(@RequestParam String password){
-        Object result = walletService.generate(password);
+    public ResponseEntity<ResponseInfo> createWallet(@RequestParam Map<String, Object> params){
+        var password = (String) params.get("password");
+        var seed = (String) params.get("seed");
+        Object result = walletService.generate(password, seed);
         var response = ResponseInfo.builder()
                 .data(result)
                 .build();
         if(((Map<?, ?>) result).containsKey("stackTrace")){
             response.setHttpCode(HttpStatusCode.valueOf(500).toString());
             response.setStackTrace((String) ((Map<?, ?>) result).get("stackTrace"));
-            response.setInfo("При создании кошелка возникла ошибка");
+            response.setInfo("При создании кошелька возникла ошибка");
         }
         else {
             response.setHttpCode(HttpStatusCode.valueOf(200).toString());

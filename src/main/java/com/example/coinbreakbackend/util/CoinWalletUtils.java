@@ -99,7 +99,7 @@ public class CoinWalletUtils {
     }
 
 
-    public static String encryptByDifficultMethod(String stringToEncrypt, Cipher cipher, byte[] salt) {
+    public static String encrypt(String stringToEncrypt, Cipher cipher, byte[] salt) {
         try {
             byte[] encryptedData = cipher.doFinal(stringToEncrypt.getBytes(StandardCharsets.UTF_8));
             byte[] prefixAndSaltAndEncryptedData = new byte[16 + encryptedData.length];
@@ -115,7 +115,7 @@ public class CoinWalletUtils {
         }
     }
 
-    public static String decryptByDifficultMethod(String stringToDecrypt, Cipher cipher, String cipherPassword){
+    public static String decrypt(String stringToDecrypt, Cipher cipher, String cipherPassword){
         try {
             int keySize = 8;
             int ivSize = 4;
