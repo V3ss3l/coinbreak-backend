@@ -10,7 +10,7 @@ import java.io.Serializable;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class WalletEntity implements Serializable {
+public class EthWallet implements Serializable {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

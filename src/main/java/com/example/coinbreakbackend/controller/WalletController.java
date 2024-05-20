@@ -1,6 +1,8 @@
 package com.example.coinbreakbackend.controller;
 
 import com.example.coinbreakbackend.model.ResponseInfo;
+import com.example.coinbreakbackend.service.CurrencyService;
+import com.example.coinbreakbackend.service.EthWalletService;
 import com.example.coinbreakbackend.service.WalletService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import org.springframework.http.HttpStatusCode;
@@ -16,15 +18,17 @@ import java.util.Map;
 @RequestMapping("/wallet")
 @CrossOrigin(origins = "http://localhost:4200")
 public class WalletController {
-    private final WalletService walletService;
+    private final EthWalletService walletService;
+    private final CurrencyService currencyService;
 
-    public WalletController(WalletService walletService) {
+    public WalletController(EthWalletService walletService, CurrencyService currencyService) {
         this.walletService = walletService;
+        this.currencyService = currencyService;
     }
 
     @GetMapping(path = "/balance/currency/{currency}", produces = "application/json")
-    public ResponseEntity<ResponseInfo> getBalanceByCurrency(@PathVariable String currency) throws JsonProcessingException {
-        var result = walletService.balance(currency);
+    public ResponseEntity<ResponseInfo> getBalanceByCurrency(@PathVariable String currency) {
+        var result = currencyService.balance(currency);
         var response = ResponseInfo.builder()
                 .data(result)
                 .build();
@@ -41,12 +45,10 @@ public class WalletController {
     }
 
     @GetMapping(path = "/balance/currency/all", produces = "application/json")
-    public ResponseEntity<ResponseInfo> getBalanceByAllCurrencies(@RequestParam Map<String, Object> params) throws JsonProcessingException {
+    public ResponseEntity<ResponseInfo> getBalanceByAllCurrencies(@RequestParam Map<String, Object> params) {
         List<Map<String, Object>> result = new ArrayList<>();
-        params.entrySet().forEach(stringObjectEntry -> {
-            result.add((Map<String, Object>) walletService.balanceAll((String) stringObjectEntry.getValue()));
-        });
-        var response = ResponseInfo.builder()
+        params.forEach((key, value) -> result.add((Map<String, Object>) currencyService.balanceAll((String) value)));
+        ResponseInfo response = ResponseInfo.builder()
                 .data(result)
                 .build();
 
@@ -161,22 +163,4 @@ public class WalletController {
         }
         return ResponseEntity.ok(response);
     }
-
-    @GetMapping(path = "/test", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<ResponseInfo> test(@RequestParam String password){
-        Object result = walletService.test(password);
-        ResponseInfo response = ResponseInfo.builder()
-                .data(result)
-                .build();
-        if(((Map<?, ?>) result).containsKey("stackTrace")){
-            response.setInfo("Произошла ошибка при тесте шифрования");
-            response.setHttpCode(HttpStatusCode.valueOf(500).toString());
-            response.setStackTrace((String) ((Map<?, ?>) result).get("stackTrace"));
-        } else {
-            response.setHttpCode(HttpStatusCode.valueOf(200).toString());
-            response.setInfo("Шифрование пароля прошло успешно");
-        }
-        return new ResponseEntity<>(response, HttpStatusCode.valueOf(200));
-    }
-
 }

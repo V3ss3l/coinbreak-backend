@@ -11,7 +11,7 @@ import java.security.NoSuchAlgorithmException;
 public class CryptoConfig {
 
     @Bean
-    public Cipher initCipherToEncryptMode() throws NoSuchPaddingException, NoSuchAlgorithmException {
+    public Cipher initCipher() throws NoSuchPaddingException, NoSuchAlgorithmException {
         return Cipher.getInstance("AES/CBC/PKCS5Padding");
     }
 }

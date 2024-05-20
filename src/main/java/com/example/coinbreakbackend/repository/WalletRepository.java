@@ -1,14 +1,12 @@
 package com.example.coinbreakbackend.repository;
 
-import com.example.coinbreakbackend.model.WalletEntity;
+import com.example.coinbreakbackend.model.EthWallet;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
-import java.io.File;
-
 @Repository
-public interface WalletRepository extends JpaRepository<WalletEntity, Long> {
+public interface WalletRepository extends JpaRepository<EthWallet, Long> {
 
-    WalletEntity getWalletEntityByPublicKey(String publicKey);
-    WalletEntity getWalletEntityByPassword(String password);
+    EthWallet getWalletEntityByPublicKey(String publicKey);
+    EthWallet getWalletEntityByPassword(String password);
 }
