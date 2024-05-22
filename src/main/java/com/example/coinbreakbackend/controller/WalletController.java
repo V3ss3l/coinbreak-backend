@@ -3,10 +3,7 @@ package com.example.coinbreakbackend.controller;
 import com.example.coinbreakbackend.model.ResponseInfo;
 import com.example.coinbreakbackend.service.CurrencyService;
 import com.example.coinbreakbackend.service.EthWalletService;
-import com.example.coinbreakbackend.service.WalletService;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import org.springframework.http.HttpStatusCode;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -27,8 +24,10 @@ public class WalletController {
     }
 
     @GetMapping(path = "/balance/currency/{currency}", produces = "application/json")
-    public ResponseEntity<ResponseInfo> getBalanceByCurrency(@PathVariable String currency) {
-        var result = currencyService.balance(currency);
+    public ResponseEntity<ResponseInfo> getBalanceByCurrency(@RequestParam Map<String, Object> params) {
+        String wallet = (String) params.get("wallet");
+        String currency = (String) params.get("currency");
+        var result = currencyService.balance(currency, wallet);
         var response = ResponseInfo.builder()
                 .data(result)
                 .build();

@@ -25,7 +25,7 @@ public class CoinWalletUtils {
     }
 
     public static String generateSeed(Integer sizeOfWords, String language) throws IOException {
-        StringBuffer seed = new StringBuffer();
+        StringBuilder seed = new StringBuilder();
         FileReader input = new FileReader(String.format("src/main/resources/words/bip39-%s.txt", language));
         BufferedReader bufRead = new BufferedReader(input);
         List<Integer> intStream = random.ints(sizeOfWords, 0, 2048)
@@ -38,12 +38,6 @@ public class CoinWalletUtils {
             seed.append(i == intStream.size() - 1 ? word : word + " ");
         }
         return seed.toString();
-    }
-
-    public static void initToEncryptModeCipher(Cipher cipher, String password) throws InvalidKeyException, NoSuchAlgorithmException {
-        byte[] bytes = password.getBytes(StandardCharsets.UTF_8);
-        SecretKey secretKey = new SecretKeySpec(bytes, "AES");
-        cipher.init(Cipher.ENCRYPT_MODE, secretKey, random);
     }
 
     public static void initToEncryptModeCipher(Cipher cipher, String password, byte[] salt) throws InvalidKeyException, NoSuchAlgorithmException, InvalidAlgorithmParameterException {
@@ -103,11 +97,8 @@ public class CoinWalletUtils {
         try {
             byte[] encryptedData = cipher.doFinal(stringToEncrypt.getBytes(StandardCharsets.UTF_8));
             byte[] prefixAndSaltAndEncryptedData = new byte[16 + encryptedData.length];
-            // Copy prefix (0-th to 7-th bytes)
             System.arraycopy("Salted__".getBytes(StandardCharsets.UTF_8), 0, prefixAndSaltAndEncryptedData, 0, 8);
-            // Copy salt (8-th to 15-th bytes)
             System.arraycopy(salt, 0, prefixAndSaltAndEncryptedData, 8, 8);
-            // Copy encrypted data (16-th byte and onwards)
             System.arraycopy(encryptedData, 0, prefixAndSaltAndEncryptedData, 16, encryptedData.length);
             return Base64.getEncoder().encodeToString(prefixAndSaltAndEncryptedData);
         } catch (Exception e) {
@@ -120,15 +111,11 @@ public class CoinWalletUtils {
             int keySize = 8;
             int ivSize = 4;
             byte[] decodedText = Base64.getDecoder().decode(stringToDecrypt.getBytes(StandardCharsets.UTF_8));
-            // prefix (first 8 bytes) is not actually useful for decryption, but you should probably check that it is equal to the string "Salted__"
             byte[] prefix = new byte[8];
             System.arraycopy(decodedText, 0, prefix, 0, 8);
-            // Check here that prefix is equal to "Salted__"
-            System.out.println("Is salted - " + new String(prefix).equals("Salted__"));
-            // Extract salt (next 8 bytes)
+            log.info("Is salted - " + new String(prefix).equals("Salted__"));
             byte[] salt = new byte[8];
             System.arraycopy(decodedText, 8, salt, 0, 8);
-            // Extract the actual cipher text (the rest of the bytes)
             byte[] trueCipherText = new byte[decodedText.length - 16];
             System.arraycopy(decodedText, 16, trueCipherText, 0, decodedText.length - 16);
             byte[] javaKey = new byte[keySize * 4];
@@ -159,10 +146,8 @@ public class CoinWalletUtils {
         try {
             md.reset();
 
-            // Repeat process until sufficient data has been generated
             while (generatedLength < keyLength + ivLength) {
 
-                // Digest data (last digest if available, password data, salt if available)
                 if (generatedLength > 0)
                     md.update(generatedData, generatedLength - digestLength, digestLength);
                 md.update(password);
@@ -170,7 +155,6 @@ public class CoinWalletUtils {
                     md.update(salt, 0, 8);
                 md.digest(generatedData, generatedLength, digestLength);
 
-                // additional rounds
                 for (int i = 1; i < iterations; i++) {
                     md.update(generatedData, generatedLength, digestLength);
                     md.digest(generatedData, generatedLength, digestLength);
@@ -179,7 +163,6 @@ public class CoinWalletUtils {
                 generatedLength += digestLength;
             }
 
-            // Copy key and IV into separate byte arrays
             byte[][] result = new byte[2][];
             result[0] = Arrays.copyOfRange(generatedData, 0, keyLength);
             if (ivLength > 0)
@@ -191,7 +174,6 @@ public class CoinWalletUtils {
             throw new RuntimeException(e);
 
         } finally {
-            // Clean out temporary data
             Arrays.fill(generatedData, (byte)0);
         }
     }
@@ -214,7 +196,6 @@ public class CoinWalletUtils {
             block = hasher.digest(salt);
             hasher.reset();
 
-            // Iterations
             for (int i = 1; i < iterations; i++) {
                 block = hasher.digest(block);
                 hasher.reset();
@@ -229,7 +210,7 @@ public class CoinWalletUtils {
         System.arraycopy(derivedBytes, 0, resultKey, 0, keySize * 4);
         System.arraycopy(derivedBytes, keySize * 4, resultIv, 0, ivSize * 4);
 
-        return derivedBytes; // key + iv
+        return derivedBytes;
     }
 
 }

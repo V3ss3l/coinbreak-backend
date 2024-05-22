@@ -1,10 +1,6 @@
 package com.example.coinbreakbackend.model;
 
-import com.example.coinbreakbackend.model.enums.TransactionType;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -22,11 +18,17 @@ public class EthTransaction implements Serializable {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    private TransactionType type;
+    private String sender;
+    @ManyToOne
+    @JoinColumn(name = "type_id")
+    private TransactionType transactionType;
     private BigInteger nonce;
+    @Column(name = "gas_price")
     private BigInteger gasPrice;
+    @Column(name = "gas_limit")
     private BigInteger gasLimit;
     private String to;
     private BigInteger value;
+    @Column(nullable = false)
     private String data;
 }
