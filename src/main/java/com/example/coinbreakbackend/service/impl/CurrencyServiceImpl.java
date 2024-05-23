@@ -5,10 +5,8 @@ import com.example.coinbreakbackend.repository.CurrencyRepository;
 import com.example.coinbreakbackend.service.CurrencyService;
 import com.example.coinbreakbackend.util.CoinWalletUtils;
 import com.example.coinbreakbackend.util.HumanStandardToken;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.web3j.crypto.Credentials;
 import org.web3j.protocol.Web3j;
 import org.web3j.protocol.core.DefaultBlockParameter;
 import org.web3j.protocol.core.methods.response.EthGetBalance;
@@ -37,12 +35,16 @@ public class CurrencyServiceImpl implements CurrencyService {
         this.cipher = cipher;
     }
 
+    /**
+     * метод для получения баланса по определенной валюте
+     */
     @Override
     public Object balance(String currency, String wallet) {
         try{
             var decryptedWallet = CoinWalletUtils.decrypt(wallet, cipher, cipherPassword);
             TransactionManager txManager = new ClientTransactionManager(web3j, decryptedWallet);
-            if(currency.equals("eth")){
+            Currency entityCurr = currencyRepository.getCurrencyByName(currency);
+            if(entityCurr.getSymbol().equals("ETH")){
                 var result = new EthGetBalance();
                 result = this.web3j.ethGetBalance(decryptedWallet,
                                 DefaultBlockParameter.valueOf("latest"))
@@ -62,6 +64,9 @@ public class CurrencyServiceImpl implements CurrencyService {
         }
     }
 
+    /**
+     * метод для получения баланса всех активов данного кошелька
+     */
     @Override
     public Object balanceAll(String wallet) {
         try{

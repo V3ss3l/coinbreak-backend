@@ -97,9 +97,13 @@ public class CoinWalletUtils {
         try {
             byte[] encryptedData = cipher.doFinal(stringToEncrypt.getBytes(StandardCharsets.UTF_8));
             byte[] prefixAndSaltAndEncryptedData = new byte[16 + encryptedData.length];
-            System.arraycopy("Salted__".getBytes(StandardCharsets.UTF_8), 0, prefixAndSaltAndEncryptedData, 0, 8);
-            System.arraycopy(salt, 0, prefixAndSaltAndEncryptedData, 8, 8);
-            System.arraycopy(encryptedData, 0, prefixAndSaltAndEncryptedData, 16, encryptedData.length);
+            System.arraycopy("Salted__".getBytes(StandardCharsets.UTF_8),
+                    0, prefixAndSaltAndEncryptedData,
+                    0, 8);
+            System.arraycopy(salt, 0,
+                    prefixAndSaltAndEncryptedData, 8, 8);
+            System.arraycopy(encryptedData, 0,
+                    prefixAndSaltAndEncryptedData, 16, encryptedData.length);
             return Base64.getEncoder().encodeToString(prefixAndSaltAndEncryptedData);
         } catch (Exception e) {
             throw new RuntimeException(e);

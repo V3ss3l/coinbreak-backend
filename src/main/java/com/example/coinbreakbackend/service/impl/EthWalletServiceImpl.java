@@ -1,9 +1,10 @@
 package com.example.coinbreakbackend.service.impl;
 
-import com.example.coinbreakbackend.model.EthWallet;
-import com.example.coinbreakbackend.model.WalletDto;
+import com.example.coinbreakbackend.model.*;
 import com.example.coinbreakbackend.repository.CurrencyRepository;
-import com.example.coinbreakbackend.repository.WalletRepository;
+import com.example.coinbreakbackend.repository.EthTransactionRepository;
+import com.example.coinbreakbackend.repository.TransactionTypeRepository;
+import com.example.coinbreakbackend.repository.EthWalletRepository;
 import com.example.coinbreakbackend.service.EthWalletService;
 import com.example.coinbreakbackend.util.CoinWalletUtils;
 import com.example.coinbreakbackend.util.HumanStandardToken;
@@ -13,23 +14,29 @@ import org.springframework.stereotype.Service;
 import org.web3j.crypto.*;
 import org.web3j.protocol.Web3j;
 import org.web3j.protocol.core.DefaultBlockParameterName;
+import org.web3j.protocol.core.RemoteCall;
 import org.web3j.protocol.core.methods.response.EthGetTransactionCount;
 import org.web3j.protocol.core.methods.response.EthSendTransaction;
+import org.web3j.protocol.core.methods.response.TransactionReceipt;
 import org.web3j.tx.gas.ContractGasProvider;
 import org.web3j.utils.Convert;
 import org.web3j.utils.Numeric;
 
 import javax.crypto.Cipher;
 import java.io.File;
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
 @Service
 public class EthWalletServiceImpl implements EthWalletService {
-    private final WalletRepository walletRepository;
+    private final EthWalletRepository ethWalletRepository;
+    private final EthTransactionRepository ethTransactionRepository;
     private final CurrencyRepository currencyRepository;
+    private final TransactionTypeRepository transactionTypeRepository;
     private final Web3j web3j;
     private final ContractGasProvider gasProvider;
     private final Cipher cipher;
@@ -40,39 +47,74 @@ public class EthWalletServiceImpl implements EthWalletService {
     @Value("${cipher.password:#{''}}")
     private String cipherPassword;
 
-    public EthWalletServiceImpl(WalletRepository walletRepository,
+    public EthWalletServiceImpl(EthWalletRepository ethWalletRepository,
+                                EthTransactionRepository ethTransactionRepository,
                                 CurrencyRepository currencyRepository,
+                                TransactionTypeRepository transactionTypeRepository,
                                 Web3j web3j,
                                 ContractGasProvider gasProvider,
                                 Cipher cipher) {
-        this.walletRepository = walletRepository;
+        this.ethWalletRepository = ethWalletRepository;
+        this.ethTransactionRepository = ethTransactionRepository;
         this.currencyRepository = currencyRepository;
+        this.transactionTypeRepository = transactionTypeRepository;
         this.web3j = web3j;
         this.gasProvider = gasProvider;
         this.cipher = cipher;
         this.objectMapper = new ObjectMapper();
     }
 
+    /**
+     * метод для перевода валюты на другой адрес кошелька
+     */
     @Override
     public Object withdraw(Long amount, String currency, String toAddress) {
         try {
             if(Objects.isNull(credentials)) return null;
 
             String decryptedAddress = CoinWalletUtils.decrypt(toAddress, cipher, cipherPassword);
-
-            BigInteger value = Convert.toWei(amount.toString(), Convert.Unit.ETHER).toBigInteger();
-
             EthGetTransactionCount ethGetTransactionCount = web3j.ethGetTransactionCount(
                     credentials.getAddress(), DefaultBlockParameterName.LATEST).sendAsync().get();
             BigInteger nonce = ethGetTransactionCount.getTransactionCount();
 
-            RawTransaction rawTransaction = RawTransaction.createEtherTransaction(nonce, gasProvider.getGasPrice(), gasProvider.getGasLimit(),
-                    decryptedAddress, value);
-            byte[] signedMessage = TransactionEncoder.signMessage(rawTransaction, credentials);
-            String hexValue = Numeric.toHexString(signedMessage);
-            EthSendTransaction ethSendTransaction = web3j.ethSendRawTransaction(hexValue).send();
+            TransactionType type = transactionTypeRepository.getTransactionTypeByName("WITHDRAW");
+            EthTransaction result = EthTransaction.builder()
+                    .gasLimit(gasProvider.getGasLimit())
+                    .gasPrice(gasProvider.getGasPrice())
+                    .sender(credentials.getAddress())
+                    .to(decryptedAddress)
+                    .transactionType(type)
+                    .nonce(nonce)
+                    .build();
+            Map<String, Object> resultMap = new HashMap<>();
+            Currency entityCurr = currencyRepository.getCurrencyByName(currency);
 
-            return Collections.singletonMap("result", ethSendTransaction.getTransactionHash());
+            if(entityCurr.getSymbol().equals("ETH")){
+                BigInteger value = Convert.toWei(amount.toString(), Convert.Unit.ETHER).toBigInteger();
+                RawTransaction rawTransaction = RawTransaction.createEtherTransaction(nonce, gasProvider.getGasPrice(),
+                        gasProvider.getGasLimit(),
+                        decryptedAddress, value);
+                byte[] signedMessage = TransactionEncoder.signMessage(rawTransaction, credentials);
+                String hexValue = Numeric.toHexString(signedMessage);
+                EthSendTransaction ethSendTransaction = web3j.ethSendRawTransaction(hexValue).send();
+                result.setValue(value);
+                result.setTransactionHash(ethSendTransaction.getTransactionHash());
+                resultMap.put("resultHash", ethSendTransaction.getTransactionHash());
+            }
+            else {
+                String contractAddress = System.getProperty(String.format("contract.erc20.%s", entityCurr.getName()));
+                HumanStandardToken token = HumanStandardToken.load(contractAddress, web3j, credentials, gasProvider);
+                BigInteger tokenDecimals = token.decimals().send();
+                BigDecimal decimal = BigDecimal.valueOf(tokenDecimals.longValue());
+                BigInteger value = BigDecimal.valueOf(amount).multiply(decimal).toBigInteger();
+                RemoteCall<TransactionReceipt> remoteCall = token.transfer(decryptedAddress, value);
+                TransactionReceipt transactionReceipt = remoteCall.send();
+                result.setValue(value);
+                result.setTransactionHash(transactionReceipt.getTransactionHash());
+                resultMap.put("resultHash", transactionReceipt.getTransactionHash());
+            }
+            ethTransactionRepository.save(result);
+            return resultMap;
         } catch (Exception e) {
             e.printStackTrace();
             var stackTrace = CoinWalletUtils.getStackTrace(e);
@@ -80,6 +122,9 @@ public class EthWalletServiceImpl implements EthWalletService {
         }
     }
 
+    /**
+     * метод для депозита валюты на кошелек
+     */
     @Override
     public Object deposit(Long amount, String currency) {
         try {
@@ -87,19 +132,43 @@ public class EthWalletServiceImpl implements EthWalletService {
             EthGetTransactionCount ethGetTransactionCount = web3j.ethGetTransactionCount(
                     credentials.getAddress(), DefaultBlockParameterName.LATEST).sendAsync().get();
             BigInteger nonce = ethGetTransactionCount.getTransactionCount();
-            RawTransaction rawTransaction = null;
-            if(currency.equals("eth")) {
+            TransactionType type = transactionTypeRepository.getTransactionTypeByName("DEPOSIT");
+            EthTransaction result = EthTransaction.builder()
+                    .gasLimit(gasProvider.getGasLimit())
+                    .gasPrice(gasProvider.getGasPrice())
+                    .sender(credentials.getAddress())
+                    .to(credentials.getAddress())
+                    .transactionType(type)
+                    .nonce(nonce)
+                    .build();
+            Map<String, Object> resultMap = new HashMap<>();
+            Currency entityCurr = currencyRepository.getCurrencyByName(currency);
+            if(entityCurr.getSymbol().equals("ETH")) {
                 BigInteger value = Convert.toWei(amount.toString(), Convert.Unit.ETHER).toBigInteger();
-                rawTransaction = RawTransaction.createEtherTransaction(nonce, gasProvider.getGasPrice(), gasProvider.getGasLimit(),
+                RawTransaction rawTransaction = RawTransaction.createEtherTransaction(nonce, gasProvider.getGasPrice(),
+                        gasProvider.getGasLimit(),
                         credentials.getAddress(), value);
+                byte[] signedMessage = TransactionEncoder.signMessage(rawTransaction, credentials);
+                String hexValue = Numeric.toHexString(signedMessage);
+                EthSendTransaction ethSendTransaction = web3j.ethSendRawTransaction(hexValue).send();
+                result.setValue(value);
+                result.setTransactionHash(ethSendTransaction.getTransactionHash());
+                resultMap.put("resultHash", ethSendTransaction.getTransactionHash());
             }
-            else{
-                BigInteger value = Convert.toWei(amount.toString(), Convert.Unit.ETHER).toBigInteger();
+            else {
+                String contractAddress = System.getProperty(String.format("contract.erc20.%s", entityCurr.getName()));
+                HumanStandardToken token = HumanStandardToken.load(contractAddress, web3j, credentials, gasProvider);
+                BigInteger tokenDecimals = token.decimals().send();
+                BigDecimal decimal = BigDecimal.valueOf(tokenDecimals.longValue());
+                BigInteger value = BigDecimal.valueOf(amount).multiply(decimal).toBigInteger();
+                RemoteCall<TransactionReceipt> remoteCall = token.transfer(credentials.getAddress(), value);
+                TransactionReceipt transactionReceipt = remoteCall.send();
+                result.setValue(value);
+                result.setTransactionHash(transactionReceipt.getTransactionHash());
+                resultMap.put("resultHash", transactionReceipt.getTransactionHash());
             }
-            byte[] signedMessage = TransactionEncoder.signMessage(rawTransaction, credentials);
-            String hexValue = Numeric.toHexString(signedMessage);
-            EthSendTransaction ethSendTransaction = web3j.ethSendRawTransaction(hexValue).send();
-            return ethSendTransaction.getTransactionHash();
+            ethTransactionRepository.save(result);
+            return resultMap;
         } catch (Exception e) {
             e.printStackTrace();
             var stackTrace = CoinWalletUtils.getStackTrace(e);
@@ -115,7 +184,7 @@ public class EthWalletServiceImpl implements EthWalletService {
         if (credentials != null) return credentials;
         try{
             String decodedPassword = CoinWalletUtils.decrypt(password, cipher, cipherPassword);
-            var entity = walletRepository.getWalletEntityByPassword(decodedPassword);
+            var entity = ethWalletRepository.getWalletEntityByPassword(decodedPassword);
             Credentials credentials = WalletUtils.loadCredentials(
                     decodedPassword, new File("src/main/resources/wallet/"+entity.getWalletFileName()));
             this.credentials = credentials;
@@ -127,6 +196,9 @@ public class EthWalletServiceImpl implements EthWalletService {
         }
     }
 
+    /**
+     * метод для генерации мнемонической фразы
+     */
     @Override
     public Object generateSeed(Integer size, String language){
         try {
@@ -142,7 +214,9 @@ public class EthWalletServiceImpl implements EthWalletService {
         }
     }
 
-
+    /**
+     * метод для генерации крипто-кошелька из пароля и мнемонической фразы
+     */
     @Override
     public Object generate(String password, String seed) {
         try {
@@ -156,7 +230,7 @@ public class EthWalletServiceImpl implements EthWalletService {
                     .password(decodedPassword)
                     .walletFileName(wallet.getFilename())
                     .build();
-            walletRepository.save(entity);
+            ethWalletRepository.save(entity);
             this.credentials = credentials;
             WalletDto dto = WalletDto.builder()
                     .id(entity.getId())

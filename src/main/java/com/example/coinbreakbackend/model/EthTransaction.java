@@ -1,10 +1,7 @@
 package com.example.coinbreakbackend.model;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 import java.io.Serializable;
 import java.math.BigInteger;
@@ -12,6 +9,7 @@ import java.math.BigInteger;
 @EqualsAndHashCode
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 @Data
 @Entity
 public class EthTransaction implements Serializable {
@@ -31,4 +29,6 @@ public class EthTransaction implements Serializable {
     private BigInteger value;
     @Column(nullable = false)
     private String data;
+    @Column(name = "transaction_hash")
+    private String transactionHash;
 }
