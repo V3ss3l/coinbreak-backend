@@ -3,7 +3,6 @@ package com.example.coinbreakbackend.util;
 import lombok.extern.slf4j.Slf4j;
 
 import javax.crypto.Cipher;
-import javax.crypto.SecretKey;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.*;
@@ -40,7 +39,8 @@ public class CoinWalletUtils {
         return seed.toString();
     }
 
-    public static void initToEncryptModeCipher(Cipher cipher, String password, byte[] salt) throws InvalidKeyException, NoSuchAlgorithmException, InvalidAlgorithmParameterException {
+    public static void initToEncryptModeCipher(Cipher cipher, String password, byte[] salt) throws InvalidKeyException,
+            NoSuchAlgorithmException, InvalidAlgorithmParameterException {
         final byte[][] keyAndIV = generateKeyAndIV(32, 16, 1, salt,
                 password.getBytes(StandardCharsets.UTF_8),
                 MessageDigest.getInstance("MD5"));
@@ -127,7 +127,7 @@ public class CoinWalletUtils {
             evpKDF(cipherPassword.getBytes(StandardCharsets.UTF_8), keySize, ivSize, salt, javaKey, javaIv);
             initToDecryptModeCipher(cipher, javaKey, javaIv);
             byte[] byteMsg = cipher.doFinal(trueCipherText);
-            return String.valueOf(byteMsg);
+            return new String(byteMsg, StandardCharsets.UTF_8);
 
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -146,10 +146,8 @@ public class CoinWalletUtils {
         int requiredLength = (keyLength + ivLength + digestLength - 1) / digestLength * digestLength;
         byte[] generatedData = new byte[requiredLength];
         int generatedLength = 0;
-
         try {
             md.reset();
-
             while (generatedLength < keyLength + ivLength) {
 
                 if (generatedLength > 0)
@@ -166,17 +164,13 @@ public class CoinWalletUtils {
 
                 generatedLength += digestLength;
             }
-
             byte[][] result = new byte[2][];
             result[0] = Arrays.copyOfRange(generatedData, 0, keyLength);
             if (ivLength > 0)
                 result[1] = Arrays.copyOfRange(generatedData, keyLength, keyLength + ivLength);
-
             return result;
-
         } catch (DigestException e) {
             throw new RuntimeException(e);
-
         } finally {
             Arrays.fill(generatedData, (byte)0);
         }
@@ -216,5 +210,4 @@ public class CoinWalletUtils {
 
         return derivedBytes;
     }
-
 }

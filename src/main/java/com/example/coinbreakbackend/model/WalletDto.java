@@ -2,16 +2,15 @@ package com.example.coinbreakbackend.model;
 
 import lombok.*;
 
-import java.io.File;
 import java.io.Serializable;
-import java.math.BigDecimal;
-import java.util.Map;
 
 @Builder
+@Getter
+@Setter
 @EqualsAndHashCode
 @NoArgsConstructor
 @AllArgsConstructor
-public class WalletDto implements Serializable{
+public class WalletDto implements Serializable {
     private Long id;
     private String publicKey;
     private String seed;

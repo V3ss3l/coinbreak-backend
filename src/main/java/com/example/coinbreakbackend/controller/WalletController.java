@@ -44,19 +44,14 @@ public class WalletController {
     }
 
     @GetMapping(path = "/balance/currency/all", produces = "application/json")
-    public ResponseEntity<ResponseInfo> getBalanceByAllCurrencies(@RequestParam Map<String, Object> params) {
-        List<Map<String, Object>> result = new ArrayList<>();
-        params.forEach((key, value) -> result.add((Map<String, Object>) currencyService.balanceAll((String) value)));
+    public ResponseEntity<ResponseInfo> getBalanceByAllCurrencies(@RequestParam String wallet) {
+        Object result = currencyService.balanceAll(wallet);
         ResponseInfo response = ResponseInfo.builder()
                 .data(result)
                 .build();
-
-        if(result.stream().anyMatch(pr -> pr.containsKey("stackTrace"))){
+        if(result instanceof Map){
             response.setHttpCode(HttpStatusCode.valueOf(500).toString());
-            response.setStackTrace((String) result.stream()
-                    .filter(pr -> pr.containsKey("stackTrace"))
-                    .findFirst().get()
-                    .get("stackTrace"));
+            response.setStackTrace((String) ((Map<String, Object>) result).get("stackTrace"));
             response.setInfo("При получении баланса возникла ошибка");
         }
         else {
@@ -127,8 +122,9 @@ public class WalletController {
         return ResponseEntity.ok(response);
     }
 
-    @GetMapping(path="/restore", produces = "application/json")
-    public ResponseEntity<ResponseInfo> restoreWallet(@RequestParam String password){
+    @PostMapping(path="/restore", produces = "application/json")
+    public ResponseEntity<ResponseInfo> restoreWallet(@RequestBody Map<String, Object> params){
+        String password = (String) params.get("password");
         var result = walletService.restore(password);
         ResponseInfo response = ResponseInfo.builder()
                 .data(result)

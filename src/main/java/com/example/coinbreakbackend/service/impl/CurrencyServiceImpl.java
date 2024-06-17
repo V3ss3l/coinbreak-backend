@@ -1,10 +1,14 @@
 package com.example.coinbreakbackend.service.impl;
 
+import com.example.coinbreakbackend.model.*;
 import com.example.coinbreakbackend.model.Currency;
 import com.example.coinbreakbackend.repository.CurrencyRepository;
 import com.example.coinbreakbackend.service.CurrencyService;
 import com.example.coinbreakbackend.util.CoinWalletUtils;
 import com.example.coinbreakbackend.util.HumanStandardToken;
+import com.fasterxml.jackson.core.Version;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.web3j.protocol.Web3j;
@@ -15,6 +19,7 @@ import org.web3j.tx.TransactionManager;
 import org.web3j.tx.gas.ContractGasProvider;
 
 import javax.crypto.Cipher;
+import java.math.BigInteger;
 import java.util.*;
 
 @Service
@@ -24,15 +29,21 @@ public class CurrencyServiceImpl implements CurrencyService {
     private final ContractGasProvider gasProvider;
     private final Cipher cipher;
     private HumanStandardToken token;
+    private ObjectMapper objectMapper;
 
     @Value("${cipher.password:#{''}}")
     private String cipherPassword;
 
-    public CurrencyServiceImpl(CurrencyRepository currencyRepository, Web3j web3j, ContractGasProvider gasProvider, Cipher cipher) {
+    public CurrencyServiceImpl(CurrencyRepository currencyRepository,
+                               Web3j web3j,
+                               ContractGasProvider gasProvider,
+                               Cipher cipher,
+                               ObjectMapper objectMapper) {
         this.currencyRepository = currencyRepository;
         this.web3j = web3j;
         this.gasProvider = gasProvider;
         this.cipher = cipher;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -50,17 +61,17 @@ public class CurrencyServiceImpl implements CurrencyService {
                                 DefaultBlockParameter.valueOf("latest"))
                         .sendAsync()
                         .get();
-                return result.getBalance().longValue();
+                return Map.of("value", result.getBalance().longValue());
             } else {
                 String contractAddress = System.getProperty(String.format("contract.erc20.%s", currency));
                 token = HumanStandardToken.load(contractAddress, web3j, txManager, gasProvider);
                 var balance = token.balanceOf(decryptedWallet);
-                return balance.send().longValue();
+                return Map.of("value", balance.send().longValue());
             }
         }catch (Exception e){
             e.printStackTrace();
             var stackTrace = CoinWalletUtils.getStackTrace(e);
-            return Map.of("value", null, "stackTrace", stackTrace);
+            return Map.of("value", "ERROR", "stackTrace", stackTrace);
         }
     }
 
@@ -73,27 +84,36 @@ public class CurrencyServiceImpl implements CurrencyService {
             var decryptedWallet = CoinWalletUtils.decrypt(wallet, cipher, cipherPassword);
             TransactionManager txManager = new ClientTransactionManager(web3j, decryptedWallet);
             List<Currency> currencyList = currencyRepository.findAll();
-            List<Map<String, Object>> resultList = new ArrayList<>();
+            List<String> resultList = new ArrayList<>();
             for (Currency currency: currencyList) {
+                BalanceDto balanceDto  = BalanceDto.builder()
+                        .currency(currency)
+                        .wallet(decryptedWallet)
+                        .build();
                 if(currency.getSymbol().equals("eth")) {
                     var result = new EthGetBalance();
                     result = this.web3j.ethGetBalance(decryptedWallet,
                                     DefaultBlockParameter.valueOf("latest"))
                             .sendAsync()
                             .get();
-                    resultList.add(Collections.singletonMap(currency.getName(), result.getBalance().longValue()));
+                    balanceDto.setAmount(result.getBalance());
                 } else {
                     String contractAddress = System.getProperty(String.format("contract.erc20.%s", currency.getSymbol()));
                     token = HumanStandardToken.load(contractAddress, web3j, txManager, gasProvider);
                     var balance = token.balanceOf(decryptedWallet);
-                    resultList.add(Collections.singletonMap(currency.getName(), balance.send().longValue()));
+                    balanceDto.setAmount(BigInteger.valueOf(balance.send().longValue()));
                 }
+                byte[] salt = CoinWalletUtils.generateSalt();
+                CoinWalletUtils.initToEncryptModeCipher(cipher, cipherPassword, salt);
+                String str = objectMapper.writeValueAsString(balanceDto);
+                String encrypted = CoinWalletUtils.encrypt(str, cipher, salt);
+                resultList.add(encrypted);
             }
             return resultList;
         }catch (Exception e){
             e.printStackTrace();
             var stackTrace = CoinWalletUtils.getStackTrace(e);
-            return Map.of("value", null, "stackTrace", stackTrace);
+            return Map.of("value", "ERROR", "stackTrace", stackTrace);
         }
     }
 }

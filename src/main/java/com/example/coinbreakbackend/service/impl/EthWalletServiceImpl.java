@@ -8,7 +8,10 @@ import com.example.coinbreakbackend.repository.EthWalletRepository;
 import com.example.coinbreakbackend.service.EthWalletService;
 import com.example.coinbreakbackend.util.CoinWalletUtils;
 import com.example.coinbreakbackend.util.HumanStandardToken;
+import com.fasterxml.jackson.core.Version;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.web3j.crypto.*;
@@ -31,6 +34,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
+@Slf4j
 @Service
 public class EthWalletServiceImpl implements EthWalletService {
     private final EthWalletRepository ethWalletRepository;
@@ -53,7 +57,8 @@ public class EthWalletServiceImpl implements EthWalletService {
                                 TransactionTypeRepository transactionTypeRepository,
                                 Web3j web3j,
                                 ContractGasProvider gasProvider,
-                                Cipher cipher) {
+                                Cipher cipher,
+                                ObjectMapper objectMapper) {
         this.ethWalletRepository = ethWalletRepository;
         this.ethTransactionRepository = ethTransactionRepository;
         this.currencyRepository = currencyRepository;
@@ -61,7 +66,7 @@ public class EthWalletServiceImpl implements EthWalletService {
         this.web3j = web3j;
         this.gasProvider = gasProvider;
         this.cipher = cipher;
-        this.objectMapper = new ObjectMapper();
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -82,7 +87,7 @@ public class EthWalletServiceImpl implements EthWalletService {
                     .gasLimit(gasProvider.getGasLimit())
                     .gasPrice(gasProvider.getGasPrice())
                     .sender(credentials.getAddress())
-                    .to(decryptedAddress)
+                    .addressTo(decryptedAddress)
                     .transactionType(type)
                     .nonce(nonce)
                     .build();
@@ -118,7 +123,7 @@ public class EthWalletServiceImpl implements EthWalletService {
         } catch (Exception e) {
             e.printStackTrace();
             var stackTrace = CoinWalletUtils.getStackTrace(e);
-            return Map.of("value", null, "stackTrace", stackTrace);
+            return Map.of("value", "ERROR", "stackTrace", stackTrace);
         }
     }
 
@@ -137,7 +142,7 @@ public class EthWalletServiceImpl implements EthWalletService {
                     .gasLimit(gasProvider.getGasLimit())
                     .gasPrice(gasProvider.getGasPrice())
                     .sender(credentials.getAddress())
-                    .to(credentials.getAddress())
+                    .addressTo(credentials.getAddress())
                     .transactionType(type)
                     .nonce(nonce)
                     .build();
@@ -172,7 +177,7 @@ public class EthWalletServiceImpl implements EthWalletService {
         } catch (Exception e) {
             e.printStackTrace();
             var stackTrace = CoinWalletUtils.getStackTrace(e);
-            return Map.of("value", null, "stackTrace", stackTrace);
+            return Map.of("value", "ERROR", "stackTrace", stackTrace);
         }
     }
 
@@ -181,10 +186,14 @@ public class EthWalletServiceImpl implements EthWalletService {
      */
     @Override
     public Object restore(String password){
-        if (credentials != null) return credentials;
+        if (credentials != null) return Map.of("value", credentials.getAddress());
         try{
             String decodedPassword = CoinWalletUtils.decrypt(password, cipher, cipherPassword);
             var entity = ethWalletRepository.getWalletEntityByPassword(decodedPassword);
+            if(Objects.isNull(entity)){
+                log.info("Не найдено кошелька с таким паролем");
+                throw new Exception("Не найдено кошелька с таким паролем");
+            }
             Credentials credentials = WalletUtils.loadCredentials(
                     decodedPassword, new File("src/main/resources/wallet/"+entity.getWalletFileName()));
             this.credentials = credentials;
@@ -192,7 +201,7 @@ public class EthWalletServiceImpl implements EthWalletService {
         } catch (Exception e){
             e.printStackTrace();
             var stackTrace = CoinWalletUtils.getStackTrace(e);
-            return Map.of("value", null, "stackTrace", stackTrace);
+            return Map.of("value", "ERROR", "stackTrace", stackTrace);
         }
     }
 
@@ -210,7 +219,7 @@ public class EthWalletServiceImpl implements EthWalletService {
         } catch (Exception e){
             e.printStackTrace();
             var stackTrace = CoinWalletUtils.getStackTrace(e);
-            return Map.of("value", null, "stackTrace", stackTrace);
+            return Map.of("value", "ERROR", "stackTrace", stackTrace);
         }
     }
 
@@ -245,7 +254,7 @@ public class EthWalletServiceImpl implements EthWalletService {
         } catch (Exception e) {
             e.printStackTrace();
             var stackTrace = CoinWalletUtils.getStackTrace(e);
-            return Map.of("value", null, "stackTrace", stackTrace);
+            return Map.of("value", "ERROR", "stackTrace", stackTrace);
         }
     }
 }

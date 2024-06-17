@@ -25,7 +25,7 @@ public class EthTransaction implements Serializable {
     private BigInteger gasPrice;
     @Column(name = "gas_limit")
     private BigInteger gasLimit;
-    private String to;
+    private String addressTo;
     private BigInteger value;
     @Column(nullable = false)
     private String data;
